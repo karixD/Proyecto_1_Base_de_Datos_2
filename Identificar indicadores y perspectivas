@@ -1,0 +1,62 @@
+1.2 identificar indicadores y perspectivas
+
+    Tiempo promedio en que una solicitud es entregada por servicios generales
+        Indicador: Tiempo promedio
+        Perspectivas: Tiempo, Solicitud
+
+    Cantidad de obras realizadas por trabajador en cada área de las instalaciones de la UNET en un mes.
+        Indicador: Cantidad de obras
+        Perspectivas: tiempo, trabajador, área
+
+    Cantidad máxima de materiales utilizados en cada mes.
+        Indicador: Cantidad Maxima
+        Perspectivas: Tiempo, material
+
+    Cantidad minima de materiales utilizados en cada mes.
+        Indicador: Cantidad minima
+        Perspectivas: Tiempo, material. 
+
+    Porcentaje de ocupación del personal de servicios generales diariamente.
+        Indicador: Porcentaje de ocupación
+        Perspectivas: Tiempo, cargo
+
+    Cantidad de proyectos que atiende el personal de servicios generales a diario simultaneamente.(no estoy segura de esta)
+        Indicador: Cantidad Proyectos
+        Perspectivas: Tiempo, cargo
+
+    Tiempo que transcurre entre 2 fallos por localidad el mismo tipo de falla.
+        Indicador: Tiempo transcurrido
+        Perspectiva: Tipo de falla, localidad
+
+    Tiempo que transcurre entre 2 fallos por localidad fallas de distinta índole.
+        Indicadores: Tiempo.
+        Perspectivas:  fallos, localidad.
+    
+    Porcentaje de costo que presenta cada centro por solicitudes de servicios generales.
+        Indicadores: Porcentaje de costo.
+        Perspectivas: centro, solicitudes.
+
+    Cantidad de tipos de fallas asociadas
+        Indicadores: Cantidad de tipos
+        Perspectivas: fallas 
+
+    Descripción de los trabajos que sobrepasan la cantidad estimada de materiales y mano de obra. 
+        Indicadores: Trabajos
+        Perspectivas: Cantidad de materiales, cantidad de mano de obra
+
+    Cantidad de solicitudes atendidas, rechazadas y en espera mensualmente.
+        Indicadores: Cantidad de solicitudes atendidas, rechazadas y en espera.
+        Perspectivas: tiempo
+
+    Descripción de fallas más comunes en los edificios.
+        Indicadores: Descripción de fallas.
+        Perspectivas: edificios
+
+    Centro de costo que es atendido más rápido.
+        Indicadores: Centro de costo.
+        Perspectivas: tiempo.
+
+    Centro de costo donde los tiempos de atención son más largos para responder sus solicitudes.
+        Indicadores: Centro de costo.
+        Perspectivas: Tiempo.
+
