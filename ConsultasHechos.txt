@@ -1,0 +1,550 @@
+Consulta a los hechos:
+======================
+
+Hecho 1:
+
+Consulta
+
+select f.codigo Formato,l.localidad localidad,s.nombre Servicio,s.tipo_servicio TipoServicio,
+        f.fecha fecha,h.promedio promedio,h.ultimo_igual_s FallasIguales,h.ultimo_diferente_s FallasDiferentes
+ from hecho_uno h,d_formato f,d_servicio s,d_localidad l,d_tiempo f
+ where h.fmo_codigo=f.formato_id and h.svo_codigo=s.servicio_id 
+ and h.lcd_codigo=l.localidad_id and f.fecha_id=h.f_inicio ;
+
+Hecho 2:
+
+select t.fecha Fecha,tr.cedula Cedula,tr.nombre Nombre,s.nombre Servicio,s.tipo_servicio Tipo,h.ocupacion Ocupacion
+ from hecho_dos h,d_tiempo t,d_trabajador tr,d_servicio s
+ where h.fecha_id=t.fecha_id and h.trabajador_id=tr.trabajador_id
+ and h.servicio_id=s.servicio_id;
+
+hecho 3:
+
+select m.nombre,s.nombre,s.tipo_servicio,t.fecha,h.aml_cantidadestimada,h.aml_cantidadusada,
+        h.exceso_material,h.exceso_mano_obra,h.personal_sug,h.personal_usa
+ from hecho_tres h,d_tiempo t,d_servicio s,d_material m,d_formato f
+ where h.fecha=t.fecha_id and h.fmo_codigo=f.formato_id and
+ h.svo_codigo=s.servicio_id and m.material_id=h.mtl_codigo;
+
+hecho 4:
+ 
+ select d.codigo,d.descripcion,s.nombre,s.tipo_servicio,h.promedio,h.duracion
+ from hecho_cuatro h,d_centro d,d_servicio s
+ where h.centro_cod=d.centro_id and s.servicio_id=h.svo_codigo
+
+Nota: se nos olvido agregar la dimension tiempo.
+
+Prodecimientos para llenar las dimensiones:
+===========================================
+
+create or replace
+procedure LLenarDimension_centro is
+   cursor centro is select ctr_id_centro,crt_descripcion 
+                    from centro group by ctr_id_centro,crt_descripcion order by ctr_id_centro;
+   codigo varchar2(20);
+   descrip varchar2(100);
+ begin
+   open centro;
+   loop
+     fetch centro into codigo,descrip;
+       insert into D_centro(centro_id,codigo,descripcion)
+       values (seq_centro.nextval,codigo,descrip);
+     exit when centro%NOTFOUND;
+   end loop;
+   close centro;
+ end;
+
+create or replace
+procedure LLenarDimension_estatus is
+   cursor estatus is select etu_nombre
+                    from estatus;
+   estatu varchar2(20);
+ begin
+   open estatus;
+   loop
+     fetch estatus into estatu;
+       insert into D_estatus(estatus_id,estatus)
+       values (seq_estatus.nextval,estatu);
+     exit when estatus%NOTFOUND;
+   end loop;
+   close estatus;
+ end;
+
+create or replace
+procedure LLenarDimension_formato is
+  cursor formatos is select fmo_codigo,jef_infa_cedula from formato;
+  codigo varchar2(20);
+  jefe varchar2(10);
+begin
+open formatos;
+  loop
+    fetch formatos into codigo,jefe;
+      insert into D_formato(formato_id,codigo,jefe_cedula)
+      values (seq_formato.nextval,codigo,jefe);
+    exit when formatos%NOTFOUND;
+  end loop;
+  close formatos;
+end;
+
+create or replace
+procedure LLenarDimension_localidad is
+   cursor localida is select lo.lcd_codigo,lo.lcd_nombre, pi.pso_nombre, ed.edo_nombre 
+                       from localidad lo
+                       left outer join edificio ed on lo.edo_codigo = ed.edo_codigo
+                       left outer join piso pi on pi.pso_codigo = lo.pso_codigo;
+   localidad varchar2(20);
+   codigo varchar2(7);
+   piso varchar2(45);
+   edificio varchar2(40);
+ begin
+   open localida;
+   loop
+     fetch localida into codigo,localidad,piso,edificio;
+       insert into D_localidad(localidad_id,codigo,localidad,piso,edificio)
+       values (seq_localidad.nextval,codigo,localidad,piso,edificio);
+     exit when localida%NOTFOUND;
+   end loop;
+   close localida;
+ end;
+
+create or replace
+procedure LLenarDimension_material is
+  cursor material is select m.mtl_codigo,m.mtl_nombre,tm.tml_nombre
+                     from material m, tipo_material tm
+                     where m.tml_codigo=tm.tml_codigo;
+  codigo varchar2(4);
+  nombre varchar2(50) ;
+  tipo varchar2(30);
+begin
+  open material;
+  loop
+    fetch material into codigo,nombre,tipo;
+      insert into D_material(material_id,codigo,nombre,tipo)
+      values (materiales.nextval,codigo,nombre,tipo);
+    exit when material%NOTFOUND;
+  end loop;
+  close material;
+end;
+
+create or replace
+procedure LLenarDimension_servicios is
+   cursor servicios is select s.svo_codigo,s.svo_nombre,t.tso_nombre 
+                       from servicio s join tipo_de_servicio t
+                       on s.tso_codigo=t.tso_codigo;
+   codigo varchar2(4);
+   nombre varchar2(45);
+   tipo varchar2(45);
+ begin
+ open servicios;
+   loop
+     fetch servicios into codigo,nombre,tipo;
+       insert into D_servicio(servicio_id,codigo,nombre,tipo_servicio)
+       values (seq_servicio.nextval,codigo,nombre,tipo);
+     exit when servicios%NOTFOUND;
+   end loop;
+   close servicios;
+ end;
+
+create or replace
+procedure LLenarDimension_tiempo is
+  Fecha_I date;
+  Fecha_F date;
+  diferencia number(3);
+  pos number(3);
+  fecha_id integer;
+  mes integer;
+  semestre integer;
+  cursor fechas is select his_fecha_inicio Inicio,his_fecha_fin Fin
+                   from item_historio order by his_fecha_inicio;
+begin
+  open fechas;
+  loop
+    fetch fechas into Fecha_I, Fecha_F;
+      diferencia:=Fecha_F-Fecha_I;
+      if diferencia =0 then
+        fecha_id:=buscar_fecha(Fecha_I);
+        if fecha_id=0 then
+          select to_char(Fecha_I,'mm')into mes from dual;
+          if mes<=6 then
+            semestre:=1;
+          else
+            semestre:=2;
+          end if;
+          insert into d_tiempo (fecha_id,Fecha,dia,mes,año,semestre,trimestre)
+          values (tiempo.nextval,Fecha_I,to_char(Fecha_I,'day'),to_char(Fecha_I,'month'),to_char(Fecha_I,'yyyy'),semestre,to_char(Fecha_I,'q'));
+        end if;
+      end if;
+      if diferencia >0 then
+        pos:=0;
+        while pos<diferencia loop 
+          fecha_id:=buscar_fecha(Fecha_I);
+          if fecha_id=0 then
+            select to_char(Fecha_I,'mm')into mes from dual;
+            if mes<=6 then
+              semestre:=1;
+            else
+              semestre:=2;
+            end if;
+            insert into d_tiempo (fecha_id,Fecha,dia,mes,año,semestre,trimestre)
+            values (tiempo.nextval,Fecha_I,to_char(Fecha_I,'day'),to_char(Fecha_I,'month'),to_char(Fecha_I,'yyyy'),semestre,to_char(Fecha_I,'q'));
+          end if;
+          select Fecha_I +1 
+          into Fecha_I from dual;
+          pos:=pos+1;
+        end loop;
+        fecha_id:=buscar_fecha(Fecha_F);
+        if fecha_id=0 then
+            select to_char(Fecha_I,'mm')into mes from dual;
+            if mes<=6 then
+              semestre:=1;
+            else
+              semestre:=2;
+            end if;
+            insert into d_tiempo (fecha_id,Fecha,dia,mes,año,semestre,trimestre)
+            values (tiempo.nextval,Fecha_F,to_char(Fecha_F,'day'),to_char(Fecha_F,'month'),to_char(Fecha_F,'yyyy'),semestre,to_char(Fecha_F,'q'));
+        end if;
+      end if;
+    exit when fechas%NOTFOUND;
+  end loop;
+  close fechas;
+end;
+
+create or replace
+procedure LLenarDimension_trabajador is
+   cursor personas is select cedula,nombre,apellido,sexo,nacionalidad
+                        from persona order by cedula asc;
+   cedula varchar(10) ;
+   nombre varchar(20) ;
+   apellido varchar(20);
+   sexo char(1);
+   nacionalidad char(1);
+ begin
+   open personas;
+   loop
+     fetch personas into cedula, nombre, apellido, sexo, nacionalidad;
+       insert into D_trabajador(trabajador_id,cedula,nombre,apellido,sexo,nacionalidad)
+       values (trabajador.nextval,cedula,nombre,apellido,sexo,nacionalidad);
+     exit when personas%NOTFOUND;
+   end loop;
+   close personas;
+ end;
+
+Funciones
+=========
+
+create or replace
+function Buscar_centro(cod varchar2)
+return integer
+as
+centro_ids integer;
+begin 
+  select centro_id 
+  into centro_ids
+  from d_centro
+  where codigo=cod and rownum<=1;
+  
+  return centro_ids;
+  
+  EXCEPTION
+  when NO_DATA_FOUND then
+    RETURN 0;
+end;
+
+create or replace
+function Buscar_estatus(estatu varchar2)
+return integer
+as
+estatus_ids integer;
+begin 
+  select estatus_id 
+  into estatus_ids
+  from d_estatus
+  where estatus=estatu and rownum<=1;
+  
+  return estatus_ids;
+  
+  EXCEPTION
+  when NO_DATA_FOUND then
+    RETURN 0;
+end;
+
+create or replace
+function Buscar_fecha(fecha_a date)
+return integer
+as
+fecha_ids integer;
+begin 
+  select fecha_id 
+  into fecha_ids
+  from d_tiempo
+  where fecha=fecha_a and rownum<=1;
+  
+  return fecha_ids;
+  
+  EXCEPTION
+  when NO_DATA_FOUND then
+    RETURN 0;
+end;
+
+create or replace
+function Buscar_formato(cod varchar2)
+return integer
+as
+formato_ids integer;
+begin 
+  select formato_id 
+  into formato_ids
+  from d_formato
+  where codigo=cod and rownum <=1;
+  
+  return formato_ids;
+  
+  EXCEPTION
+  when NO_DATA_FOUND then
+    RETURN 0;
+end;
+
+create or replace
+function Buscar_localidad(cod varchar2)
+return integer
+as
+localidad_ids integer;
+begin 
+  select localidad_id 
+  into localidad_ids
+  from d_localidad
+  where codigo=cod and rownum<=1;
+  
+  return localidad_ids;
+  
+  EXCEPTION
+  when NO_DATA_FOUND then
+    RETURN 0;
+end;
+
+create or replace
+function Buscar_material(nom varchar2)
+return integer
+as
+material_ids integer;
+begin 
+  select material_id 
+  into material_ids
+  from d_material
+  where codigo=nom and rownum<=1;
+  
+  return material_ids;
+  
+  EXCEPTION
+  when NO_DATA_FOUND then
+    RETURN 0;
+end;
+
+create or replace
+function Buscar_servicio(cod varchar2)
+return integer
+as
+servicio_ids integer;
+begin 
+  select servicio_id 
+  into servicio_ids
+  from d_servicio
+  where codigo=cod and rownum<=1;
+  
+  return servicio_ids;
+  
+  EXCEPTION
+  when NO_DATA_FOUND then
+    RETURN 0;
+end;
+
+create or replace
+function Buscar_trabajador(ced varchar2)
+return integer
+as
+trabajador_ids integer;
+begin 
+  select trabajador_id 
+  into trabajador_ids
+  from d_trabajador
+  where cedula=ced and rownum<=1;
+  
+  return trabajador_ids;
+  
+  EXCEPTION
+  when NO_DATA_FOUND then
+    RETURN 0;
+end;
+
+Procedimientos para llenar los hechos:
+======================================
+
+create or replace
+procedure LLenar_Hecho_uno is
+  cursor Hechos is Select I.fmo_codigo, I.svo_codigo, f.lcd_codigo, round(avg(I.his_fecha_fin-	I.his_fecha_inicio),2) as Promedio, 
+                   min(I.his_fecha_inicio) as Inicio, max(I.his_fecha_fin) as Fin, hist.Ultimo as Ultimo_Igual_S, hist2.ultimo as Ultimo_Diferente_S
+                   From item_historio I
+                      left outer join item F on I.fmo_codigo = F.fmo_codigo and i.svo_codigo=f.svo_codigo
+                      left outer join (select ii.fmo_codigo, ii.svo_codigo, it.lcd_codigo, ii.his_fecha_inicio, (select min(ii.his_fecha_inicio-ih.his_fecha_inicio)
+                            from item_historio ih join item ite on ite.svo_codigo = ih.svo_codigo and ite.fmo_codigo = ih.fmo_codigo
+                            where ih.etu_codigo='1' and ii.his_fecha_inicio> ih.his_fecha_inicio and ii.svo_codigo=ih.svo_codigo and ite.lcd_codigo = it.lcd_codigo) as Ultimo
+                            from item_historio ii join item it on it.svo_codigo = ii.svo_codigo and it.fmo_codigo = ii.fmo_codigo
+                            where ii.etu_codigo='1' ) hist on hist.svo_codigo=i.svo_codigo and hist.lcd_codigo=f.lcd_codigo and hist.fmo_codigo=i.fmo_codigo
+                      left outer join (select ii.fmo_codigo,ii.svo_codigo, it.lcd_codigo, ii.his_fecha_inicio, (select min(ii.his_fecha_inicio-ih.his_fecha_inicio)
+                            from item_historio ih join item ite on ite.svo_codigo = ih.svo_codigo and ite.fmo_codigo = ih.fmo_codigo
+                            where ih.etu_codigo='1' and ii.his_fecha_inicio> ih.his_fecha_inicio and ite.lcd_codigo = it.lcd_codigo) as Ultimo
+                            from item_historio ii join item it on it.svo_codigo = ii.svo_codigo and it.fmo_codigo = ii.fmo_codigo
+                            where ii.etu_codigo='1' ) hist2 on hist2.svo_codigo=i.svo_codigo and hist2.lcd_codigo=f.lcd_codigo and hist2.fmo_codigo=i.fmo_codigo
+                  Where I.his_fecha_fin-I.his_fecha_inicio>0 
+                  Group By I.fmo_codigo,I.svo_codigo,f.lcd_codigo, hist.ultimo, hist2.ultimo
+                  Order by f.lcd_codigo,I.svo_codigo,i.fmo_codigo, INicio;
+  fmo_codigo varchar2(20);
+  svo_codigo varchar2(4);
+  lcd_codigo varchar2(7);
+  promedio number(8,2);
+  f_inicio date;
+  f_fin date;
+  ultimo_igual number(10,2);
+  ultimo_diferente number(10,2);
+  id1 integer;
+  id2 integer;
+  id3 integer;
+  id4 integer;
+  id5 integer;
+begin
+open Hechos;
+  loop
+    fetch Hechos into fmo_codigo,svo_codigo,lcd_codigo,promedio,f_inicio,f_fin,ultimo_igual,ultimo_diferente;
+      id1:=buscar_formato(fmo_codigo);
+      id2:=buscar_servicio(svo_codigo);
+      id3:=buscar_localidad(lcd_codigo);
+      id4:=buscar_fecha(f_inicio);
+      id5:=buscar_fecha(f_fin);
+      insert into hecho_uno(codigo,fmo_codigo,svo_codigo,lcd_codigo,f_inicio,f_fin,promedio,ultimo_igual_s,ultimo_diferente_s)
+      values (seq_hecho_uno.nextval,id1,id2,id3,id4,id5,promedio,ultimo_igual,ultimo_diferente);
+    exit when Hechos%NOTFOUND;
+  end loop;
+  close Hechos;
+end;
+
+create or replace
+procedure LLenar_hecho_dos is
+   cursor fechas is select fecha
+                   from d_tiempo;
+   dia date;
+   cursor ocupaciones (dia date)is Select p.cedula, p.svo_codigo, sum(to_number(p.apl_personalusado))*100 as Ocupacion 
+                                 From asig_persona p join item_historio i on p.svo_codigo=i.svo_codigo and p.fmo_codigo = i.fmo_codigo
+                                 Where i.etu_codigo = '4' 
+                                 and dia between i.his_fecha_inicio and i.his_fecha_fin
+                                 Group by p.cedula, p.svo_codigo
+                                 Order by p.cedula,p.svo_codigo;
+   cedula varchar2(10);
+   servicio varchar2(4);
+   ocupacion integer;
+   id_ced integer;
+   id_servio integer;
+   id_fecha integer;
+ begin
+   open fechas;
+   loop
+     fetch fechas into dia;
+       open ocupaciones(dia);
+       loop
+        fetch ocupaciones into cedula,servicio,ocupacion;
+          id_ced:=Buscar_trabajador(cedula);
+          id_servio:=buscar_servicio(servicio);
+          id_fecha:=buscar_fecha(dia);
+          /*dbms_output.put_line(cedula||' '||servicio||' '||ocupacion||' '||dia);*/
+          insert into hecho_dos(codigo,fecha_id,trabajador_id,servicio_id,ocupacion)
+          values (seq_hecho_dos.nextval,id_fecha,id_ced,id_servio,ocupacion);  
+        exit when ocupaciones%NOTFOUND;
+       end loop;
+       close ocupaciones;
+     exit when fechas%NOTFOUND;
+   end loop;
+   close fechas;
+ end;
+
+create or replace
+procedure LLenar_hecho_tres is
+   cursor fechas is select fecha
+                   from d_tiempo;
+   dia date;
+   cursor hechos (dia date)is select asi.fmo_codigo, asi.svo_codigo, asi.mtl_codigo, dia, 
+                                   asi.aml_cantidadestimada, asi.aml_cantidadusada, (asi.aml_cantidadusada-asi.aml_cantidadestimada) as Exceso_Material,
+                                   asip.personalsug, asip.personalusa, (asip.personalusa-asip.personalsug) as Exceso_Mano_Obra
+                                   from asig_material asi
+                                   left outer  join item_historio ite on ite.fmo_codigo = asi.fmo_codigo and ite.svo_codigo = asi.svo_codigo
+                                   left outer join (select fmo_codigo, svo_codigo, count(apl_personalsugerido) as personalsug, sum(to_number(apl_personalusado)) as personalusa 
+                                   from asig_persona group by  fmo_codigo, svo_codigo) asip on asip.fmo_codigo = asi.fmo_codigo and asip.svo_codigo = asi.svo_codigo
+                                   where dia between ite.his_fecha_inicio and ite.his_fecha_fin;
+   formato varchar2(10);
+   servicio varchar2(4);
+   material integer;
+   fecha date;
+   aml_cantidadestimada integer;
+   aml_cantidadusada integer;
+   exceso_material integer;
+   personal_sug integer;
+   personal_usa integer;
+   exceso_mano_obra integer;
+   id_formato integer;
+   id_servio integer;
+   id_mate integer;
+   id_fecha integer;
+ begin
+   open fechas;
+   loop
+     fetch fechas into dia;
+       open hechos(dia);
+       loop
+        fetch hechos into formato,servicio,material,fecha,aml_cantidadestimada,aml_cantidadusada,exceso_material,personal_sug,personal_usa,exceso_mano_obra;
+          id_formato:=Buscar_formato(formato);
+          id_servio:=buscar_servicio(servicio);
+          id_fecha:=buscar_fecha(fecha);
+          id_mate:=buscar_material(material);
+          /*dbms_output.put_line(id_formato||' '||id_servio||' '||id_fecha||' '||id_mate);*/
+          if id_formato!=0 and id_servio!=0 and id_fecha!=0 then
+           insert into hecho_tres(codigo,fmo_codigo,svo_codigo,mtl_codigo,fecha,aml_cantidadestimada,aml_cantidadusada,exceso_material,personal_sug,personal_usa,exceso_mano_obra)
+           values (seq_hecho_tres.nextval,id_formato,id_servio,id_mate,id_fecha,aml_cantidadestimada,aml_cantidadusada,exceso_material,personal_sug,personal_usa,exceso_mano_obra);  
+          end if;
+        exit when hechos%NOTFOUND;
+       end loop;
+       close hechos;
+     exit when fechas%NOTFOUND;
+   end loop;
+   close fechas;
+ end;
+
+create or replace
+procedure LLenar_hecho_cuatro is
+   cursor hecho is select l.ctr_id_centro, i.svo_codigo, count(i.svo_codigo), round(( count(i.svo_codigo)/(select count( min(his_fecha_inicio)) from item_historio group by svo_codigo, fmo_codigo 
+                                                                having sysdate >  min(his_fecha_inicio) and sysdate < max(his_fecha_fin))*100),2) as Porcentaje, (ih.fin-ih.inicio) as Duracion
+                   from  item i
+                   left outer join localidad l on l.lcd_codigo = i.lcd_codigo
+                   left outer join centro ce on l.ctr_id_centro = ce.ctr_id_centro and l.ctr_ano_fiscal = ce.ctr_ano_fiscal
+                   left outer join (select fmo_codigo, svo_codigo, min(his_fecha_inicio) as inicio, max(his_fecha_fin) as fin from item_historio 
+                   group by fmo_codigo,svo_codigo) ih on ih.fmo_codigo = i.fmo_codigo and ih.svo_codigo = i.svo_codigo
+                   group by l.ctr_id_centro, ce.crt_descripcion, ih.inicio, ih.fin, i.svo_codigo
+                   having sysdate > ih.inicio and sysdate < ih.fin
+                   order by l.ctr_id_centro;
+   cedula varchar2(10);
+   servicio varchar2(4);
+   contador integer;
+   porcentaje number(10,2);
+   ocupacion integer;
+   id_centro integer;
+   id_servidor integer;
+ begin
+   open hecho;
+   loop
+     fetch hecho into cedula,servicio,contador,porcentaje,ocupacion;
+          id_centro:=buscar_centro(cedula);
+          id_servidor:=buscar_servicio(servicio);
+          /*dbms_output.put_line(cedula||' '||servicio||' '||ocupacion||' '||dia);*/
+          insert into hecho_cuatro(codigo,centro_cod,svo_codigo,contador,promedio,duracion)
+          values (seq_hecho_cuatro.nextval,id_centro,id_servidor,contador,porcentaje,ocupacion);  
+     exit when hecho%NOTFOUND;
+   end loop;
+   close hecho;
+ end;
